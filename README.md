@@ -278,3 +278,4 @@ python generate_invoices.py --count 100 | python submit_invoices.py
 - **SQLite Datastore**: Used for the self-contained 24-hour slice; would migrate to PostgreSQL in a high-concurrency production setting.
 - **Fixed-Window Limiter**: Uses 1-second fixed windows in Redis; sufficient for 10 req/s, but a Token Bucket algorithm can smooth micro-bursts at the boundary of a second.
 - **Single Redis Node**: For production, a Redis Sentinel or Redis Cluster configuration provides high availability.
+"# Invoice-Ingestion-Reconciliation-Pipeline" 
