@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: reconciliation_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mock-erp:
+    build: .
+    container_name: reconciliation_mock_erp
+    command: uvicorn mock_erp:app --host 0.0.0.0 --port 9100
+    environment:
+      ERP_SEED: "42"
+      ERP_RATE_LIMIT: "10"
+      ERP_PO_COUNT: "33333"
+      ERP_CHAOS: "1"
+    ports:
+      - "9100:9100"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9100/healthz\")'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    container_name: reconciliation_api
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      ERP_BASE_URL: "http://mock-erp:9100"
+      ERP_RATE_LIMIT: "10"
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      mock-erp:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: reconciliation_worker
+    command: celery -A core worker -l info --concurrency=4
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      ERP_BASE_URL: "http://mock-erp:9100"
+      ERP_RATE_LIMIT: "10"
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      mock-erp:
+        condition: service_healthy
+      api:
+        condition: service_started
